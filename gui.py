@@ -100,8 +100,8 @@ class PianoApp(ctk.CTk):
                                         text_color=COLOR_WHITE)
         self.label_tempo.pack(pady=5)
 
-        self.slider_tempo = ctk.CTkSlider(self.frame_tempo, from_=30, to=267, 
-                                          number_of_steps=237, 
+        self.slider_tempo = ctk.CTkSlider(self.frame_tempo, from_=30, to=1067, 
+                                          number_of_steps=1037, 
                                           command=self.update_tempo,
                                           button_color=COLOR_SILVER,
                                           button_hover_color=COLOR_WHITE,
