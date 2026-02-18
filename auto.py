@@ -1,83 +1,148 @@
 # Code originally created by maksimKorzh on Github https://github.com/maksimKorzh
 # Code adjusted by Xi-v on Github https://github.com/Xi-v
-#
-# Note from Xi-v:
-# Thank you to the original owner for creating the process, I adjusted it so that it could handle
-# special characters and uppercase, so it would work for all scripts.
-# please enjoy, and don't forget to favourite and watch the repo!
-#
-# There is a way to change the tempo down below, in a variable called delay
+# Code adapted to linux by elza on Github https://github.com/khuza08/autoblox
 
-# packages
 import time
+import threading
+import sys
+
+# Backend selection
+try:
+    import evdev
+    from evdev import UInput, ecodes as e
+    LINUX_EVDEV = True
+except ImportError:
+    LINUX_EVDEV = False
+
 from pynput.keyboard import Controller, Key
 
-# Initialize the keyboard controller
-keyboard = Controller()
-
-
-print("Quickly head over to your desired choice of playing")
-print('Music will start playing in 2 seconds...')
-time.sleep(2)
-
-# Change the temp here (in seconds 1 = 1 second, 0.5 = Half a second)
-# 0.095 is default best sound by far
-# 0.095 for Stay with me
-# 0.12 for Fallen Down
-# 0.09 for Ao No Sumika
-# 0.095 for Shinunoga E wa
-# 0.115 for Believer
-# 0.095 for Golden hour
-
-delay = 0.095
-
-# Mapping for special characters that require Shift
-special_characters = {
-    '!': '1', '@': '2', '#': '3', '$': '4', '%': '5',
-    '^': '6', '&': '7', '*': '8', '(': '9', ')': '0',
-    '_': '-', '+': '=', '{': '[', '}': ']', ':': ';',
-    '"': "'", '<': ',', '>': '.', '?': '/'
-}
-
-def press_key(note):
-    if note in special_characters:  
-        keyboard.press(Key.shift)
-        keyboard.press(special_characters[note])
-        keyboard.release(special_characters[note])
-        keyboard.release(Key.shift)
-    elif note.isupper():
-        keyboard.press(Key.shift)
-        keyboard.press(note.lower())
-        keyboard.release(note.lower())
-        keyboard.release(Key.shift)
-    else: 
-        keyboard.press(note)
-        keyboard.release(note)
-
-with open('sheet.txt') as f:
-    notes = f.read()
-    index = 0
-
-    while index in range(len(notes)):
-        if notes[index].isalnum() or notes[index] in special_characters:
-            press_key(notes[index])
-            print("pressed key:", notes[index])
-
+class PianoPlayer:
+    def __init__(self, delay=0.095):
+        self.delay = delay
+        self._stop_event = threading.Event()
+        
+        # Initialize backend
+        if LINUX_EVDEV and sys.platform.startswith('linux'):
+            try:
+                self.ui = UInput()
+                self.backend = 'evdev'
+                print("Backend: evdev (Wayland/Linux supported)")
+            except Exception as err:
+                print(f"evdev failed: {err}. Falling back to pynput.")
+                self.keyboard = Controller()
+                self.backend = 'pynput'
         else:
-            if notes[index] == '|': 
-                time.sleep(delay * 8)
+            self.keyboard = Controller()
+            self.backend = 'pynput'
+            print("Backend: pynput")
 
-            if notes[index] == '[':
-                chord = []
-                while notes[index] != ']':
-                    if notes[index].isalnum() or notes[index] in special_characters:
-                        chord.append(notes[index])
+        self.special_characters = {
+            '!': '1', '@': '2', '#': '3', '$': '4', '%': '5',
+            '^': '6', '&': '7', '*': '8', '(': '9', ')': '0',
+            '_': '-', '+': '=', '{': '[', '}': ']', ':': ';',
+            '"': "'", '<': ',', '>': '.', '?': '/'
+        }
+        
+        # Scancode mapping for Linux evdev (partial, common keys)
+        if hasattr(self, 'backend') and self.backend == 'evdev':
+            self.key_map = {
+                '1': e.KEY_1, '2': e.KEY_2, '3': e.KEY_3, '4': e.KEY_4, '5': e.KEY_5,
+                '6': e.KEY_6, '7': e.KEY_7, '8': e.KEY_8, '9': e.KEY_9, '0': e.KEY_0,
+                'a': e.KEY_A, 'b': e.KEY_B, 'c': e.KEY_C, 'd': e.KEY_D, 'e': e.KEY_E,
+                'f': e.KEY_F, 'g': e.KEY_G, 'h': e.KEY_H, 'i': e.KEY_I, 'j': e.KEY_J,
+                'k': e.KEY_K, 'l': e.KEY_L, 'm': e.KEY_M, 'n': e.KEY_N, 'o': e.KEY_O,
+                'p': e.KEY_P, 'q': e.KEY_Q, 'r': e.KEY_R, 's': e.KEY_S, 't': e.KEY_T,
+                'u': e.KEY_U, 'v': e.KEY_V, 'w': e.KEY_W, 'x': e.KEY_X, 'y': e.KEY_Y,
+                'z': e.KEY_Z,
+                '-': e.KEY_MINUS, '=': e.KEY_EQUAL, '[': e.KEY_LEFTBRACE, ']': e.KEY_RIGHTBRACE,
+                ';': e.KEY_SEMICOLON, "'": e.KEY_APOSTROPHE, ',': e.KEY_COMMA, '.': e.KEY_DOT,
+                '/': e.KEY_SLASH
+            }
+
+    def press_key(self, note):
+        if self.backend == 'evdev':
+            self._press_evdev(note)
+        else:
+            self._press_pynput(note)
+
+    def _press_pynput(self, note):
+        if note in self.special_characters:  
+            self.keyboard.press(Key.shift)
+            self.keyboard.press(self.special_characters[note])
+            self.keyboard.release(self.special_characters[note])
+            self.keyboard.release(Key.shift)
+        elif note.isupper():
+            self.keyboard.press(Key.shift)
+            self.keyboard.press(note.lower())
+            self.keyboard.release(note.lower())
+            self.keyboard.release(Key.shift)
+        else: 
+            self.keyboard.press(note)
+            self.keyboard.release(note)
+
+    def _press_evdev(self, note):
+        char = note
+        needs_shift = False
+
+        if note in self.special_characters:
+            char = self.special_characters[note]
+            needs_shift = True
+        elif note.isupper():
+            char = note.lower()
+            needs_shift = True
+
+        code = self.key_map.get(char)
+        if code:
+            if needs_shift:
+                self.ui.write(e.EV_KEY, e.KEY_LEFTSHIFT, 1)
+            
+            self.ui.write(e.EV_KEY, code, 1)
+            self.ui.write(e.EV_KEY, code, 0)
+            
+            if needs_shift:
+                self.ui.write(e.EV_KEY, e.KEY_LEFTSHIFT, 0)
+            
+            self.ui.syn()
+
+    def stop(self):
+        self._stop_event.set()
+
+    def play(self, sheet_content):
+        self._stop_event.clear()
+        notes = sheet_content
+        index = 0
+
+        while index < len(notes) and not self._stop_event.is_set():
+            if notes[index].isalnum() or notes[index] in self.special_characters:
+                self.press_key(notes[index])
+
+            else:
+                if notes[index] == '|': 
+                    time.sleep(self.delay * 8)
+
+                if notes[index] == '[':
+                    chord = []
                     index += 1
+                    while index < len(notes) and notes[index] != ']':
+                        if notes[index].isalnum() or notes[index] in self.special_characters:
+                            chord.append(notes[index])
+                        index += 1
 
-                for note in chord:
-                    press_key(note)
+                    for note in chord:
+                        self.press_key(note)
 
-                print("pressed keys:", chord)
+            time.sleep(self.delay)
+            index += 1
 
-        time.sleep(delay)
-        index += 1        
+if __name__ == "__main__":
+    print("Quickly head over to your desired choice of playing")
+    print('Music will start playing in 2 seconds...')
+    time.sleep(2)
+    
+    player = PianoPlayer()
+    try:
+        with open('sheet.txt') as f:
+            content = f.read()
+            player.play(content)
+    except FileNotFoundError:
+        print("Error: sheet.txt not found.")
