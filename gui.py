@@ -143,7 +143,7 @@ class PianoApp(ctk.CTk):
 
         # Countdown Label
         self.label_countdown = ctk.CTkLabel(self, text="", 
-                                             font=ctk.CTkFont(size=36, weight="bold"),
+                                             font=ctk.CTkFont(size=24, weight="bold"),
                                              text_color=COLOR_SILVER)
         self.label_countdown.pack(pady=5)
 
@@ -324,7 +324,7 @@ class PianoApp(ctk.CTk):
             time.sleep(1)
         
         if not self.playing: return
-        self.after(0, lambda: self.label_countdown.configure(text="🎵 Playing..."))
+        self.after(0, lambda: self.label_countdown.configure(text="Playing..."))
         
         self.player.play(self.sheet_content)
         

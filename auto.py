@@ -64,7 +64,7 @@ class PianoPlayer:
             self._press_evdev(note)
         else:
             self._press_pynput(note)
-        print(f"[LOG] Pressed: {note}")
+        # print(f"[LOG] Pressed: {note}") # Reduced noise for high precision
 
     def _press_pynput(self, note):
         if note in self.special_characters:  
@@ -109,34 +109,60 @@ class PianoPlayer:
         self._stop_event.set()
         print("[LOG] Playing stopped.")
 
+    def _wait_until(self, target_time):
+        """High-precision spin-wait loop."""
+        while time.perf_counter() < target_time:
+            if self._stop_event.is_set():
+                break
+            # Small yield to OS if we have enough time (to save power)
+            diff = target_time - time.perf_counter()
+            if diff > 0.002:
+                time.sleep(0.001)
+
     def play(self, sheet_content):
         self._stop_event.clear()
         notes = sheet_content
+        print(f"[LOG] High-Precision Play: Absolute Scheduling active.")
+
+        # Pre-process notes to calculate timestamps
+        schedule = []
+        current_time_offset = 0.0
         index = 0
-        print(f"[LOG] Playing sheet ({len(notes)} characters)...")
-
-        while index < len(notes) and not self._stop_event.is_set():
+        
+        while index < len(notes):
             if notes[index].isalnum() or notes[index] in self.special_characters:
-                self.press_key(notes[index])
-
-            else:
-                if notes[index] == '|': 
-                    time.sleep(self.delay * 8)
-
-                if notes[index] == '[':
-                    chord = []
+                schedule.append((current_time_offset, [notes[index]]))
+            elif notes[index] == '|':
+                current_time_offset += self.delay * 8
+                index += 1
+                continue
+            elif notes[index] == '[':
+                chord = []
+                index += 1
+                while index < len(notes) and notes[index] != ']':
+                    if notes[index].isalnum() or notes[index] in self.special_characters:
+                        chord.append(notes[index])
                     index += 1
-                    while index < len(notes) and notes[index] != ']':
-                        if notes[index].isalnum() or notes[index] in self.special_characters:
-                            chord.append(notes[index])
-                        index += 1
-
-                    for note in chord:
-                        self.press_key(note)
-                    print(f"[LOG] Pressed chord: {''.join(chord)}")
-
-            time.sleep(self.delay)
+                if chord:
+                    schedule.append((current_time_offset, chord))
+            
+            # Every note/chord move forward by delay
+            current_time_offset += self.delay
             index += 1
+
+        # Execute schedule
+        start_time = time.perf_counter()
+        print(f"[LOG] Sequence loaded: {len(schedule)} events scheduled.")
+
+        for offset, events in schedule:
+            if self._stop_event.is_set():
+                break
+            
+            target = start_time + offset
+            self._wait_until(target)
+            
+            for note in events:
+                self.press_key(note)
         
         if not self._stop_event.is_set():
             print("[LOG] Finished playing.")
