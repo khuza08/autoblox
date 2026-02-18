@@ -1,7 +1,3 @@
-# Code originally created by maksimKorzh on Github https://github.com/maksimKorzh
-# Code adjusted by Xi-v on Github https://github.com/Xi-v
-# Code adapted to linux by elza on Github https://github.com/khuza08/autoblox
-
 import time
 import threading
 import sys
@@ -23,6 +19,7 @@ class PianoPlayer:
         self.hold_percent = hold_percent
         self.humanize = humanize
         self._stop_event = threading.Event()
+        self.ui = None
         
         # Initialize backend
         if LINUX_EVDEV and sys.platform.startswith('linux'):
@@ -62,34 +59,42 @@ class PianoPlayer:
                 '/': e.KEY_SLASH
             }
 
-    def press_key(self, note, duration=0.02):
+    def __del__(self):
+        """Cleanup resources."""
+        if self.ui:
+            try:
+                self.ui.close()
+                print("[LOG] evdev UInput closed.")
+            except:
+                pass
+
+    def _send_key_event(self, note, is_press):
+        """Non-blocking key event sender."""
         if self.backend == 'evdev':
-            self._press_evdev(note, duration)
+            self._send_evdev(note, is_press)
         else:
-            self._press_pynput(note, duration)
+            self._send_pynput(note, is_press)
 
-    def _press_pynput(self, note, duration):
-        if note in self.special_characters:  
-            self.keyboard.press(Key.shift)
-            self.keyboard.press(self.special_characters[note])
-            time.sleep(duration)
-            self.keyboard.release(self.special_characters[note])
-            self.keyboard.release(Key.shift)
-        elif note.isupper():
-            self.keyboard.press(Key.shift)
-            self.keyboard.press(note.lower())
-            time.sleep(duration)
-            self.keyboard.release(note.lower())
-            self.keyboard.release(Key.shift)
-        else: 
-            self.keyboard.press(note)
-            time.sleep(duration)
-            self.keyboard.release(note)
-
-    def _press_evdev(self, note, duration):
+    def _send_pynput(self, note, is_press):
         char = note
         needs_shift = False
+        if note in self.special_characters:
+            char = self.special_characters[note]
+            needs_shift = True
+        elif note.isupper():
+            char = note.lower()
+            needs_shift = True
 
+        if is_press:
+            if needs_shift: self.keyboard.press(Key.shift)
+            self.keyboard.press(char)
+        else:
+            self.keyboard.release(char)
+            if needs_shift: self.keyboard.release(Key.shift)
+
+    def _send_evdev(self, note, is_press):
+        char = note
+        needs_shift = False
         if note in self.special_characters:
             char = self.special_characters[note]
             needs_shift = True
@@ -99,96 +104,107 @@ class PianoPlayer:
 
         code = self.key_map.get(char)
         if code:
+            val = 1 if is_press else 0
             if needs_shift:
-                self.ui.write(e.EV_KEY, e.KEY_LEFTSHIFT, 1)
-            
-            self.ui.write(e.EV_KEY, code, 1)
-            self.ui.syn()
-            
-            time.sleep(duration)
-            
-            self.ui.write(e.EV_KEY, code, 0)
-            if needs_shift:
-                self.ui.write(e.EV_KEY, e.KEY_LEFTSHIFT, 0)
-            
+                self.ui.write(e.EV_KEY, e.KEY_LEFTSHIFT, val)
+            self.ui.write(e.EV_KEY, code, val)
             self.ui.syn()
 
     def stop(self):
         self._stop_event.set()
-        print("[LOG] Playing stopped.")
 
     def _wait_until(self, target_time):
         """High-precision spin-wait loop."""
         while time.perf_counter() < target_time:
             if self._stop_event.is_set():
-                break
-            # Small yield to OS if we have enough time
+                return False
             diff = target_time - time.perf_counter()
             if diff > 0.002:
                 time.sleep(0.001)
+        return True
 
     def play(self, sheet_content):
         self._stop_event.clear()
-        notes = sheet_content
-        print(f"[LOG] Play with Humanization: {'ON' if self.humanize else 'OFF'}")
+        print(f"[LOG] Event-Based Play: {'Humanize ON' if self.humanize else 'OFF'}")
 
-        schedule = []
-        current_time_offset = 0.0
+        # Pre-process: Create a flat list of events (time, type, note)
+        events = [] # List of (timestamp, type, note)
+        current_time = 0.0
         index = 0
-        
+        notes = sheet_content
+
         while index < len(notes):
-            if notes[index].isalnum() or notes[index] in self.special_characters:
-                schedule.append((current_time_offset, [notes[index]]))
-            elif notes[index] == '|':
-                current_time_offset += self.delay * 8
+            char = notes[index]
+            
+            # Simple sanitization
+            if char.isspace():
                 index += 1
                 continue
-            elif notes[index] == '[':
-                chord = []
+
+            if char.isalnum() or char in self.special_characters:
+                # SINGLE NOTE
+                self._schedule_note(events, current_time, char)
+                current_time += self.delay
+            elif char == '|':
+                current_time += self.delay * 8
+            elif char == '[':
+                # CHORD
+                chord_notes = []
                 index += 1
                 while index < len(notes) and notes[index] != ']':
-                    if notes[index].isalnum() or notes[index] in self.special_characters:
-                        chord.append(notes[index])
+                    if not notes[index].isspace() and (notes[index].isalnum() or notes[index] in self.special_characters):
+                        chord_notes.append(notes[index])
                     index += 1
-                if chord:
-                    schedule.append((current_time_offset, chord))
-            
-            current_time_offset += self.delay
+                
+                # Schedule chord with micro-offsets if humanized
+                for i, chord_note in enumerate(chord_notes):
+                    offset = 0
+                    if self.humanize:
+                        offset = i * random.uniform(0.005, 0.012)
+                    self._schedule_note(events, current_time + offset, chord_note)
+                
+                current_time += self.delay
             index += 1
 
+        # Sort events by time
+        events.sort(key=lambda x: x[0])
+        
         start_time = time.perf_counter()
+        print(f"[LOG] Sequence loaded: {len(events)} events scheduled.")
 
-        for offset, events in schedule:
-            if self._stop_event.is_set():
+        for ts, action, note in events:
+            if not self._wait_until(start_time + ts):
                 break
             
-            # Apply Timing Jitter
-            jitter = 0
-            if self.humanize:
-                jitter = random.uniform(-0.005, 0.005)
-            
-            target = start_time + offset + jitter
-            self._wait_until(target)
-            
-            # Dynamic Hold Duration
-            duration = self.delay * self.hold_percent
-            if self.humanize:
-                duration *= random.uniform(0.9, 1.1)
-                duration = max(0.01, duration) # Don't go too low
+            is_press = (action == "press")
+            self._send_key_event(note, is_press)
 
-            for i, note in enumerate(events):
-                # Chord Strum: Delay between notes in a chord
-                if i > 0 and self.humanize:
-                    time.sleep(random.uniform(0.005, 0.015))
-                
-                # We need to launch the key press in a short-lived thread for chords
-                # or just use duration manually if it's a single note.
-                # To keep it simple and accurate, for chords we'll just press them fast
-                # unless a more complex async logic is needed.
-                self.press_key(note, duration)
+        print("[LOG] Playback finished or stopped.")
+
+    def _schedule_note(self, event_list, startTime, note):
+        """Calculate press and release times for a note."""
+        jitter = 0
+        if self.humanize:
+            jitter = random.uniform(-0.005, 0.005)
         
-        if not self._stop_event.is_set():
-            print("[LOG] Finished playing.")
+        press_time = startTime + jitter
+        
+        # Duration calculation
+        duration = self.delay * self.hold_percent
+        if self.humanize:
+            duration *= random.uniform(0.9, 1.1)
+        
+        duration = max(0.015, duration) # Safety minimum
+        
+        # Release humanization (slight offset for release)
+        release_jitter = 0
+        if self.humanize:
+            release_jitter = random.uniform(0, 0.01)
+
+        release_time = press_time + duration + release_jitter
+        
+        event_list.append((press_time, "press", note))
+        event_list.append((release_time, "release", note))
 
 if __name__ == "__main__":
     player = PianoPlayer()
