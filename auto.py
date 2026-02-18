@@ -5,6 +5,7 @@
 import time
 import threading
 import sys
+import random
 
 # Backend selection
 try:
@@ -17,8 +18,10 @@ except ImportError:
 from pynput.keyboard import Controller, Key
 
 class PianoPlayer:
-    def __init__(self, delay=0.095):
+    def __init__(self, delay=0.095, hold_percent=0.8, humanize=False):
         self.delay = delay
+        self.hold_percent = hold_percent
+        self.humanize = humanize
         self._stop_event = threading.Event()
         
         # Initialize backend
@@ -59,29 +62,31 @@ class PianoPlayer:
                 '/': e.KEY_SLASH
             }
 
-    def press_key(self, note):
+    def press_key(self, note, duration=0.02):
         if self.backend == 'evdev':
-            self._press_evdev(note)
+            self._press_evdev(note, duration)
         else:
-            self._press_pynput(note)
-        # print(f"[LOG] Pressed: {note}") # Reduced noise for high precision
+            self._press_pynput(note, duration)
 
-    def _press_pynput(self, note):
+    def _press_pynput(self, note, duration):
         if note in self.special_characters:  
             self.keyboard.press(Key.shift)
             self.keyboard.press(self.special_characters[note])
+            time.sleep(duration)
             self.keyboard.release(self.special_characters[note])
             self.keyboard.release(Key.shift)
         elif note.isupper():
             self.keyboard.press(Key.shift)
             self.keyboard.press(note.lower())
+            time.sleep(duration)
             self.keyboard.release(note.lower())
             self.keyboard.release(Key.shift)
         else: 
             self.keyboard.press(note)
+            time.sleep(duration)
             self.keyboard.release(note)
 
-    def _press_evdev(self, note):
+    def _press_evdev(self, note, duration):
         char = note
         needs_shift = False
 
@@ -98,8 +103,11 @@ class PianoPlayer:
                 self.ui.write(e.EV_KEY, e.KEY_LEFTSHIFT, 1)
             
             self.ui.write(e.EV_KEY, code, 1)
-            self.ui.write(e.EV_KEY, code, 0)
+            self.ui.syn()
             
+            time.sleep(duration)
+            
+            self.ui.write(e.EV_KEY, code, 0)
             if needs_shift:
                 self.ui.write(e.EV_KEY, e.KEY_LEFTSHIFT, 0)
             
@@ -114,7 +122,7 @@ class PianoPlayer:
         while time.perf_counter() < target_time:
             if self._stop_event.is_set():
                 break
-            # Small yield to OS if we have enough time (to save power)
+            # Small yield to OS if we have enough time
             diff = target_time - time.perf_counter()
             if diff > 0.002:
                 time.sleep(0.001)
@@ -122,9 +130,8 @@ class PianoPlayer:
     def play(self, sheet_content):
         self._stop_event.clear()
         notes = sheet_content
-        print(f"[LOG] High-Precision Play: Absolute Scheduling active.")
+        print(f"[LOG] Play with Humanization: {'ON' if self.humanize else 'OFF'}")
 
-        # Pre-process notes to calculate timestamps
         schedule = []
         current_time_offset = 0.0
         index = 0
@@ -146,23 +153,39 @@ class PianoPlayer:
                 if chord:
                     schedule.append((current_time_offset, chord))
             
-            # Every note/chord move forward by delay
             current_time_offset += self.delay
             index += 1
 
-        # Execute schedule
         start_time = time.perf_counter()
-        print(f"[LOG] Sequence loaded: {len(schedule)} events scheduled.")
 
         for offset, events in schedule:
             if self._stop_event.is_set():
                 break
             
-            target = start_time + offset
+            # Apply Timing Jitter
+            jitter = 0
+            if self.humanize:
+                jitter = random.uniform(-0.005, 0.005)
+            
+            target = start_time + offset + jitter
             self._wait_until(target)
             
-            for note in events:
-                self.press_key(note)
+            # Dynamic Hold Duration
+            duration = self.delay * self.hold_percent
+            if self.humanize:
+                duration *= random.uniform(0.9, 1.1)
+                duration = max(0.01, duration) # Don't go too low
+
+            for i, note in enumerate(events):
+                # Chord Strum: Delay between notes in a chord
+                if i > 0 and self.humanize:
+                    time.sleep(random.uniform(0.005, 0.015))
+                
+                # We need to launch the key press in a short-lived thread for chords
+                # or just use duration manually if it's a single note.
+                # To keep it simple and accurate, for chords we'll just press them fast
+                # unless a more complex async logic is needed.
+                self.press_key(note, duration)
         
         if not self._stop_event.is_set():
             print("[LOG] Finished playing.")

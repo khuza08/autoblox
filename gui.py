@@ -59,10 +59,9 @@ class PianoApp(ctk.CTk):
         self.configure(fg_color=COLOR_GRAPHITE)
 
         print("[LOG] Initializing PianoPlayer...")
-        self.player = PianoPlayer(delay=0.095)
+        self.player = PianoPlayer(delay=60.0/67.0, hold_percent=0.67, humanize=False)
         self.playing = False
         self.sheet_content = ""
-        self.file_path = "sheet.txt"
         self.hotkey_key = "F5"
         self.recording_hotkey = False
         self._stop_listener = threading.Event()
@@ -87,38 +86,53 @@ class PianoApp(ctk.CTk):
                                       text_color=COLOR_WHITE, font=("Courier", 12))
         self.textbox.pack(pady=5, padx=20, fill="both", expand=True)
 
-        # File Selection
-        self.frame_file = ctk.CTkFrame(self, fg_color=COLOR_CHARCOAL)
-        self.frame_file.pack(pady=5, padx=20, fill="x")
 
-        self.btn_select = ctk.CTkButton(self.frame_file, text="Load File to Box", 
-                                         command=self.select_file,
-                                         fg_color=COLOR_SILVER,
-                                         text_color=COLOR_GRAPHITE,
-                                         hover_color=COLOR_ALABASTER)
-        self.btn_select.grid(row=0, column=0, pady=10, padx=10)
-
-        self.label_file = ctk.CTkLabel(self.frame_file, text="File: sheet.txt", 
-                                       font=ctk.CTkFont(size=12),
-                                       text_color=COLOR_ALABASTER)
-        self.label_file.grid(row=0, column=1, pady=10, padx=10)
-
-        # Tempo Control
+        # BPM (Tempo) Control
         self.frame_tempo = ctk.CTkFrame(self, fg_color=COLOR_CHARCOAL)
         self.frame_tempo.pack(pady=5, padx=20, fill="x")
 
-        self.label_tempo = ctk.CTkLabel(self.frame_tempo, text="Tempo (Delay: 0.095s)",
+        # Initial BPM set to 67
+        initial_bpm = 67
+        self.label_tempo = ctk.CTkLabel(self.frame_tempo, text=f"Tempo (BPM: {initial_bpm})",
                                         text_color=COLOR_WHITE)
         self.label_tempo.pack(pady=5)
 
-        self.slider_tempo = ctk.CTkSlider(self.frame_tempo, from_=0.05, to=0.3, 
-                                          number_of_steps=50, 
+        self.slider_tempo = ctk.CTkSlider(self.frame_tempo, from_=30, to=267, 
+                                          number_of_steps=237, 
                                           command=self.update_tempo,
                                           button_color=COLOR_SILVER,
                                           button_hover_color=COLOR_WHITE,
                                           progress_color=COLOR_SILVER)
-        self.slider_tempo.set(0.095)
+        self.slider_tempo.set(initial_bpm)
         self.slider_tempo.pack(pady=10, padx=20, fill="x")
+
+        # Hold Percentage Control
+        self.frame_hold = ctk.CTkFrame(self, fg_color=COLOR_CHARCOAL)
+        self.frame_hold.pack(pady=5, padx=20, fill="x")
+
+        self.label_hold = ctk.CTkLabel(self.frame_hold, text="Hold Percentage: 67%",
+                                        text_color=COLOR_WHITE)
+        self.label_hold.pack(pady=5)
+
+        self.slider_hold = ctk.CTkSlider(self.frame_hold, from_=0.1, to=1.0, 
+                                          number_of_steps=90, 
+                                          command=self.update_hold_percent,
+                                          button_color=COLOR_SILVER,
+                                          button_hover_color=COLOR_WHITE,
+                                          progress_color=COLOR_SILVER)
+        self.slider_hold.set(0.67)
+        self.slider_hold.pack(pady=10, padx=20, fill="x")
+
+        # Humanize Control
+        self.frame_human = ctk.CTkFrame(self, fg_color=COLOR_CHARCOAL)
+        self.frame_human.pack(pady=5, padx=20, fill="x")
+
+        self.switch_human = ctk.CTkSwitch(self.frame_human, text="Humanize Mode (Random Jitter)",
+                                          command=self.update_humanize,
+                                          progress_color=COLOR_SILVER,
+                                          button_color=COLOR_WHITE,
+                                          button_hover_color=COLOR_ALABASTER)
+        self.switch_human.pack(pady=10, padx=20)
 
         # Hotkey Setting
         self.frame_hotkey = ctk.CTkFrame(self, fg_color=COLOR_CHARCOAL)
@@ -145,7 +159,7 @@ class PianoApp(ctk.CTk):
         self.label_countdown = ctk.CTkLabel(self, text="", 
                                              font=ctk.CTkFont(size=24, weight="bold"),
                                              text_color=COLOR_SILVER)
-        self.label_countdown.pack(pady=5)
+        self.label_countdown.pack(pady=0)
 
         # Start/Stop Button
         self.btn_toggle = ctk.CTkButton(self, text="START MUSIC", 
@@ -155,7 +169,7 @@ class PianoApp(ctk.CTk):
                                         fg_color=COLOR_ALABASTER, 
                                         text_color=COLOR_GRAPHITE,
                                         hover_color=COLOR_WHITE)
-        self.btn_toggle.pack(pady=(10, 5), padx=20, fill="x")
+        self.btn_toggle.pack(pady=(0, 10), padx=20, fill="x")
 
         self.label_status = ctk.CTkLabel(self, text=self.backend_msg, 
                                          font=ctk.CTkFont(size=10), 
@@ -168,21 +182,6 @@ class PianoApp(ctk.CTk):
         # Start global hotkey listener
         self._start_global_hotkey_listener()
 
-    # ---- File Loading ----
-    def select_file(self):
-        path = filedialog.askopenfilename(filetypes=[("Text files", "*.txt")])
-        if path:
-            self.file_path = path
-            self.label_file.configure(text=f"File: {os.path.basename(path)}")
-            print(f"[LOG] Loading sheet from: {path}")
-            try:
-                with open(path, "r") as f:
-                    content = f.read()
-                    self.textbox.delete("1.0", "end")
-                    self.textbox.insert("1.0", content)
-            except Exception as ex:
-                print(f"[ERR] Failed to load file: {ex}")
-
     def load_initial_sheet(self, path):
         if os.path.exists(path):
             print(f"[LOG] Loading initial sheet: {path}")
@@ -194,8 +193,21 @@ class PianoApp(ctk.CTk):
 
     # ---- Tempo ----
     def update_tempo(self, value):
-        self.player.delay = float(value)
-        self.label_tempo.configure(text=f"Tempo (Delay: {float(value):.3f}s)")
+        bpm = int(value)
+        # Convert BPM to Delay (Seconds): delay = 60 / BPM
+        delay = 60.0 / bpm
+        self.player.delay = delay
+        self.label_tempo.configure(text=f"Tempo (BPM: {bpm})")
+        # print(f"[LOG] Tempo changed: {bpm} BPM (Delay: {delay:.4f}s)")
+
+    def update_hold_percent(self, value):
+        self.player.hold_percent = float(value)
+        self.label_hold.configure(text=f"Hold Percentage: {int(float(value)*100)}%")
+
+    def update_humanize(self):
+        self.player.humanize = self.switch_human.get()
+        state = "ON" if self.player.humanize else "OFF"
+        print(f"[LOG] Humanize Mode: {state}")
 
     # ---- Global Hotkey via evdev (Multi-Device) ----
     def _start_global_hotkey_listener(self):
@@ -315,7 +327,7 @@ class PianoApp(ctk.CTk):
             self.playing = False
             self.player.stop()
             self.label_countdown.configure(text="")
-            self.btn_toggle.configure(text="START MUSIC", fg_color="#E0E0E0", text_color="#303030", hover_color="#FFFFFF")
+            self.btn_toggle.configure(text="START AUTO", fg_color="#E0E0E0", text_color="#303030", hover_color="#FFFFFF")
 
     def play_music(self):
         for i in range(3, 0, -1):
