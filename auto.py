@@ -104,10 +104,12 @@ class PianoPlayer:
 
         code = self.key_map.get(char)
         if code:
-            val = 1 if is_press else 0
-            if needs_shift:
-                self.ui.write(e.EV_KEY, e.KEY_LEFTSHIFT, val)
-            self.ui.write(e.EV_KEY, code, val)
+            if is_press:
+                if needs_shift: self.ui.write(e.EV_KEY, e.KEY_LEFTSHIFT, 1)
+                self.ui.write(e.EV_KEY, code, 1)
+            else:
+                self.ui.write(e.EV_KEY, code, 0)
+                if needs_shift: self.ui.write(e.EV_KEY, e.KEY_LEFTSHIFT, 0)
             self.ui.syn()
 
     def stop(self):
