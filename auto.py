@@ -69,7 +69,10 @@ class PianoPlayer:
                 pass
 
     def _send_key_event(self, note, is_press):
-        """Non-blocking key event sender."""
+        """Non-blocking key event sender with verbose logging."""
+        action = "PRESS" if is_press else "RELEASE"
+        print(f"[VERBOSE] {action}: {note}")
+        
         if self.backend == 'evdev':
             self._send_evdev(note, is_press)
         else:
@@ -105,11 +108,15 @@ class PianoPlayer:
         code = self.key_map.get(char)
         if code:
             if is_press:
-                if needs_shift: self.ui.write(e.EV_KEY, e.KEY_LEFTSHIFT, 1)
+                if needs_shift:
+                    self.ui.write(e.EV_KEY, e.KEY_LEFTSHIFT, 1)
+                    self.ui.syn() # Separate sync for shift press
                 self.ui.write(e.EV_KEY, code, 1)
             else:
                 self.ui.write(e.EV_KEY, code, 0)
-                if needs_shift: self.ui.write(e.EV_KEY, e.KEY_LEFTSHIFT, 0)
+                if needs_shift:
+                    self.ui.syn() # Ensure key release is synced before shift release
+                    self.ui.write(e.EV_KEY, e.KEY_LEFTSHIFT, 0)
             self.ui.syn()
 
     def stop(self):
@@ -127,8 +134,7 @@ class PianoPlayer:
 
     def play(self, sheet_content):
         self._stop_event.clear()
-        print(f"[LOG] Event-Based Play: {'Humanize ON' if self.humanize else 'OFF'}")
-
+        
         # Pre-process: Create a flat list of events (time, type, note)
         events = [] # List of (timestamp, type, note)
         current_time = 0.0
@@ -138,8 +144,8 @@ class PianoPlayer:
         while index < len(notes):
             char = notes[index]
             
-            # Simple sanitization
-            if char.isspace():
+            # Sanitization: Ignore spaces and bar lines as timing units
+            if char.isspace() or char == '|':
                 index += 1
                 continue
 
@@ -147,8 +153,6 @@ class PianoPlayer:
                 # SINGLE NOTE
                 self._schedule_note(events, current_time, char)
                 current_time += self.delay
-            elif char == '|':
-                current_time += self.delay * 8
             elif char == '[':
                 # CHORD
                 chord_notes = []
@@ -171,15 +175,25 @@ class PianoPlayer:
         # Sort events by time
         events.sort(key=lambda x: x[0])
         
-        start_time = time.perf_counter()
-        print(f"[LOG] Sequence loaded: {len(events)} events scheduled.")
+        total_duration = events[-1][0] if events else 0
+        print(f"[LOG] Playback System | Humanize: {'ON' if self.humanize else 'OFF'}")
+        print(f"[LOG] Sequence: {len(events)} events | Estimated Duration: {total_duration:.2f}s")
 
-        for ts, action, note in events:
+        start_time = time.perf_counter()
+        for i, (ts, action, note) in enumerate(events):
             if not self._wait_until(start_time + ts):
                 break
             
+            # Periodic heartbeat log every 10 events
+            if i % 10 == 0:
+                print(f"[LOG] Playing event {i}/{len(events)} (Time: {ts:.2f}s / {total_duration:.2f}s)")
+
             is_press = (action == "press")
             self._send_key_event(note, is_press)
+
+        # SEAMLESS LOGIC: Wait until the very end of the last beat before returning
+        # This ensures the next loop starts exactly on time.
+        self._wait_until(start_time + current_time)
 
         print("[LOG] Playback finished or stopped.")
 

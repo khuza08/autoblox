@@ -389,7 +389,6 @@ class PianoApp(ctk.CTk):
                 break
             
             print("[LOG] Loop enabled. Restarting playback...")
-            time.sleep(0.5) # Short gap before restart
         
         self.playing = False
         self.after(0, lambda: self.label_countdown.configure(text=""))
