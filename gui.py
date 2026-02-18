@@ -61,6 +61,7 @@ class PianoApp(ctk.CTk):
         print("[LOG] Initializing PianoPlayer...")
         self.player = PianoPlayer(delay=60.0/67.0, hold_percent=0.67, humanize=False)
         self.playing = False
+        self.loop_mode = False
         self.sheet_content = ""
         self.hotkey_key = "F5"
         self.recording_hotkey = False
@@ -127,17 +128,34 @@ class PianoApp(ctk.CTk):
         self.slider_hold.set(0.67)
         self.slider_hold.pack(pady=10, padx=10, fill="x")
 
-        # Humanize Control
-        self.frame_human = ctk.CTkFrame(self, fg_color="transparent", 
-                                        border_width=2, border_color=COLOR_CHARCOAL)
-        self.frame_human.pack(pady=5, padx=20, fill="x")
+        # Options Container (Humanize & Loop)
+        self.frame_options = ctk.CTkFrame(self, fg_color="transparent")
+        self.frame_options.pack(pady=5, padx=20, fill="x")
+        self.frame_options.grid_columnconfigure((0, 1), weight=1)
 
-        self.switch_human = ctk.CTkSwitch(self.frame_human, text="Humanize Mode (Random Jitter)",
+        # Humanize Control
+        self.frame_human = ctk.CTkFrame(self.frame_options, fg_color="transparent", 
+                                        border_width=2, border_color=COLOR_CHARCOAL)
+        self.frame_human.grid(row=0, column=0, padx=(0, 5), sticky="nsew")
+
+        self.switch_human = ctk.CTkSwitch(self.frame_human, text="Humanize Mode",
                                           command=self.update_humanize,
                                           progress_color=COLOR_SILVER,
                                           button_color=COLOR_WHITE,
                                           button_hover_color=COLOR_ALABASTER)
-        self.switch_human.pack(pady=10, padx=20)
+        self.switch_human.pack(pady=10, padx=10)
+
+        # Loop Control
+        self.frame_loop = ctk.CTkFrame(self.frame_options, fg_color="transparent", 
+                                       border_width=2, border_color=COLOR_CHARCOAL)
+        self.frame_loop.grid(row=0, column=1, padx=(5, 0), sticky="nsew")
+
+        self.switch_loop = ctk.CTkSwitch(self.frame_loop, text="Loop Mode",
+                                         command=self.update_loop,
+                                         progress_color=COLOR_SILVER,
+                                         button_color=COLOR_WHITE,
+                                         button_hover_color=COLOR_ALABASTER)
+        self.switch_loop.pack(pady=10, padx=10)
 
         # Hotkey Setting
         self.frame_hotkey = ctk.CTkFrame(self, fg_color="transparent", 
@@ -214,6 +232,11 @@ class PianoApp(ctk.CTk):
         self.player.humanize = self.switch_human.get()
         state = "ON" if self.player.humanize else "OFF"
         print(f"[LOG] Humanize Mode: {state}")
+
+    def update_loop(self):
+        self.loop_mode = bool(self.switch_loop.get())
+        state = "ON" if self.loop_mode else "OFF"
+        print(f"[LOG] Loop Mode: {state}")
 
     # ---- Global Hotkey via evdev (Multi-Device) ----
     def _start_global_hotkey_listener(self):
@@ -336,19 +359,26 @@ class PianoApp(ctk.CTk):
             self.btn_toggle.configure(text="START AUTO", fg_color="#E0E0E0", text_color="#303030", hover_color="#FFFFFF")
 
     def play_music(self):
+        # Countdown only once
         for i in range(3, 0, -1):
             if not self.playing: return 
             self.after(0, lambda n=i: self.label_countdown.configure(text=f"Starting in {n}..."))
             time.sleep(1)
         
-        if not self.playing: return
-        self.after(0, lambda: self.label_countdown.configure(text="Playing..."))
-        
-        self.player.play(self.sheet_content)
+        while self.playing:
+            self.after(0, lambda: self.label_countdown.configure(text="Playing..."))
+            self.player.play(self.sheet_content)
+            
+            # If loop is off or we stopped manually, break the cycle
+            if not self.loop_mode or not self.playing:
+                break
+            
+            print("[LOG] Loop enabled. Restarting playback...")
+            time.sleep(0.5) # Short gap before restart
         
         self.playing = False
         self.after(0, lambda: self.label_countdown.configure(text=""))
-        self.after(0, lambda: self.btn_toggle.configure(text="START MUSIC", fg_color="#E0E0E0", text_color="#303030", hover_color="#FFFFFF"))
+        self.after(0, lambda: self.btn_toggle.configure(text="START AUTO", fg_color="#E0E0E0", text_color="#303030", hover_color="#FFFFFF"))
 
 if __name__ == "__main__":
     app = PianoApp()
