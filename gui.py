@@ -10,7 +10,7 @@ class PianoApp(ctk.CTk):
         super().__init__()
 
         self.title("Roblox Piano Auto Player")
-        self.geometry("450x420")
+        self.geometry("600x650") # Window size increased for textbox
         
         # ThEme
         COLOR_WHITE = "#FFFFFF"
@@ -37,23 +37,32 @@ class PianoApp(ctk.CTk):
         self.label_title = ctk.CTkLabel(self, text="Roblox Piano Player", 
                                         font=ctk.CTkFont(size=24, weight="bold"),
                                         text_color=COLOR_WHITE)
-        self.label_title.pack(pady=20)
+        self.label_title.pack(pady=(20, 10))
+
+        # Sheet Input Area (Textbox)
+        self.label_box = ctk.CTkLabel(self, text="Paste or Edit Music Sheet Below:", 
+                                      font=ctk.CTkFont(size=14), text_color=COLOR_ALABASTER)
+        self.label_box.pack(pady=5)
+        
+        self.textbox = ctk.CTkTextbox(self, height=250, fg_color=COLOR_CHARCOAL, 
+                                      text_color=COLOR_WHITE, font=("Courier", 12))
+        self.textbox.pack(pady=10, padx=20, fill="both", expand=True)
 
         # File Selection Area
         self.frame_file = ctk.CTkFrame(self, fg_color=COLOR_CHARCOAL)
         self.frame_file.pack(pady=10, padx=20, fill="x")
 
-        self.btn_select = ctk.CTkButton(self.frame_file, text="Select Sheet", 
+        self.btn_select = ctk.CTkButton(self.frame_file, text="Load File to Box", 
                                          command=self.select_file,
                                          fg_color=COLOR_SILVER,
                                          text_color=COLOR_GRAPHITE,
                                          hover_color=COLOR_ALABASTER)
-        self.btn_select.pack(pady=10, padx=10)
+        self.btn_select.grid(row=0, column=0, pady=10, padx=10)
 
-        self.label_file = ctk.CTkLabel(self.frame_file, text="Current file: sheet.txt", 
+        self.label_file = ctk.CTkLabel(self.frame_file, text="File: sheet.txt", 
                                        font=ctk.CTkFont(size=12),
                                        text_color=COLOR_ALABASTER)
-        self.label_file.pack(pady=5)
+        self.label_file.grid(row=0, column=1, pady=10, padx=10)
 
         # Tempo Control
         self.frame_tempo = ctk.CTkFrame(self, fg_color=COLOR_CHARCOAL)
@@ -80,7 +89,7 @@ class PianoApp(ctk.CTk):
                                         fg_color=COLOR_ALABASTER, 
                                         text_color=COLOR_GRAPHITE,
                                         hover_color=COLOR_WHITE)
-        self.btn_toggle.pack(pady=30, padx=20, fill="x")
+        self.btn_toggle.pack(pady=(20, 10), padx=20, fill="x")
 
         self.label_status = ctk.CTkLabel(self, text=self.backend_msg, 
                                          font=ctk.CTkFont(size=10), 
@@ -88,21 +97,29 @@ class PianoApp(ctk.CTk):
         self.label_status.pack(side="bottom", pady=5)
 
         # Load initial sheet if exists
-        self.load_sheet("sheet.txt")
+        self.load_initial_sheet("sheet.txt")
 
     def select_file(self):
         path = filedialog.askopenfilename(filetypes=[("Text files", "*.txt")])
         if path:
             self.file_path = path
-            self.label_file.configure(text=f"Current file: {os.path.basename(path)}")
-            self.load_sheet(path)
+            self.label_file.configure(text=f"File: {os.path.basename(path)}")
+            try:
+                with open(path, "r") as f:
+                    content = f.read()
+                    self.textbox.delete("1.0", "end")
+                    self.textbox.insert("1.0", content)
+            except Exception as e:
+                self.label_file.configure(text=f"Error: {str(e)}")
 
-    def load_sheet(self, path):
-        try:
-            with open(path, "r") as f:
-                self.sheet_content = f.read()
-        except Exception as e:
-            self.label_file.configure(text=f"Error loading file: {str(e)}")
+    def load_initial_sheet(self, path):
+        if os.path.exists(path):
+            try:
+                with open(path, "r") as f:
+                    content = f.read()
+                    self.textbox.insert("1.0", content)
+            except:
+                pass
 
     def update_tempo(self, value):
         self.player.delay = float(value)
@@ -110,10 +127,21 @@ class PianoApp(ctk.CTk):
 
     def toggle_playing(self):
         if not self.playing:
-            if not self.sheet_content:
-                self.label_file.configure(text="No sheet loaded!")
+            # Get latest content from textbox
+            self.sheet_content = self.textbox.get("1.0", "end-1c")
+            
+            if not self.sheet_content.strip():
+                self.label_box.configure(text_color="red", text="INPUT BOX IS EMPTY!")
+                self.after(2000, lambda: self.label_box.configure(text_color="#E0E0E0", text="Paste or Edit Music Sheet Below:"))
                 return
             
+            # Save to sheet.txt for persistence
+            try:
+                with open("sheet.txt", "w") as f:
+                    f.write(self.sheet_content)
+            except:
+                pass
+
             self.playing = True
             self.btn_toggle.configure(text="STOP MUSIC", fg_color="#FF5555", text_color="white", hover_color="#CC0000")
             
