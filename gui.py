@@ -87,11 +87,13 @@ class PianoApp(ctk.CTk):
         self.textbox.pack(pady=5, padx=20, fill="both", expand=True)
 
 
-        # BPM (Tempo) Control
-        self.frame_tempo = ctk.CTkFrame(self, fg_color=COLOR_CHARCOAL)
-        self.frame_tempo.pack(pady=5, padx=20, fill="x")
+        self.frame_combined = ctk.CTkFrame(self, fg_color="transparent")
+        self.frame_combined.pack(pady=5, padx=20, fill="x")
+        self.frame_combined.grid_columnconfigure((0, 1), weight=1)
 
-        # Initial BPM set to 67
+        self.frame_tempo = ctk.CTkFrame(self.frame_combined, fg_color=COLOR_CHARCOAL)
+        self.frame_tempo.grid(row=0, column=0, padx=(0, 5), sticky="nsew")
+
         initial_bpm = 67
         self.label_tempo = ctk.CTkLabel(self.frame_tempo, text=f"Tempo (BPM: {initial_bpm})",
                                         text_color=COLOR_WHITE)
@@ -104,11 +106,11 @@ class PianoApp(ctk.CTk):
                                           button_hover_color=COLOR_WHITE,
                                           progress_color=COLOR_SILVER)
         self.slider_tempo.set(initial_bpm)
-        self.slider_tempo.pack(pady=10, padx=20, fill="x")
+        self.slider_tempo.pack(pady=10, padx=10, fill="x")
 
-        # Hold Percentage Control
-        self.frame_hold = ctk.CTkFrame(self, fg_color=COLOR_CHARCOAL)
-        self.frame_hold.pack(pady=5, padx=20, fill="x")
+        # Hold Percentage Column
+        self.frame_hold = ctk.CTkFrame(self.frame_combined, fg_color=COLOR_CHARCOAL)
+        self.frame_hold.grid(row=0, column=1, padx=(5, 0), sticky="nsew")
 
         self.label_hold = ctk.CTkLabel(self.frame_hold, text="Hold Percentage: 67%",
                                         text_color=COLOR_WHITE)
@@ -121,7 +123,7 @@ class PianoApp(ctk.CTk):
                                           button_hover_color=COLOR_WHITE,
                                           progress_color=COLOR_SILVER)
         self.slider_hold.set(0.67)
-        self.slider_hold.pack(pady=10, padx=20, fill="x")
+        self.slider_hold.pack(pady=10, padx=10, fill="x")
 
         # Humanize Control
         self.frame_human = ctk.CTkFrame(self, fg_color=COLOR_CHARCOAL)
