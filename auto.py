@@ -26,15 +26,15 @@ class PianoPlayer:
             try:
                 self.ui = UInput()
                 self.backend = 'evdev'
-                print("Backend: evdev (Wayland/Linux supported)")
+                print(f"[LOG] Backend: evdev (Wayland Support)")
             except Exception as err:
-                print(f"evdev failed: {err}. Falling back to pynput.")
+                print(f"[LOG] evdev failed: {err}. Falling back to pynput.")
                 self.keyboard = Controller()
                 self.backend = 'pynput'
         else:
             self.keyboard = Controller()
             self.backend = 'pynput'
-            print("Backend: pynput")
+            print(f"[LOG] Backend: pynput")
 
         self.special_characters = {
             '!': '1', '@': '2', '#': '3', '$': '4', '%': '5',
@@ -43,7 +43,7 @@ class PianoPlayer:
             '"': "'", '<': ',', '>': '.', '?': '/'
         }
         
-        # Scancode mapping for Linux evdev (partial, common keys)
+        # Scancode mapping for Linux evdev
         if hasattr(self, 'backend') and self.backend == 'evdev':
             self.key_map = {
                 '1': e.KEY_1, '2': e.KEY_2, '3': e.KEY_3, '4': e.KEY_4, '5': e.KEY_5,
@@ -64,6 +64,7 @@ class PianoPlayer:
             self._press_evdev(note)
         else:
             self._press_pynput(note)
+        print(f"[LOG] Pressed: {note}")
 
     def _press_pynput(self, note):
         if note in self.special_characters:  
@@ -106,11 +107,13 @@ class PianoPlayer:
 
     def stop(self):
         self._stop_event.set()
+        print("[LOG] Playing stopped.")
 
     def play(self, sheet_content):
         self._stop_event.clear()
         notes = sheet_content
         index = 0
+        print(f"[LOG] Playing sheet ({len(notes)} characters)...")
 
         while index < len(notes) and not self._stop_event.is_set():
             if notes[index].isalnum() or notes[index] in self.special_characters:
@@ -130,19 +133,19 @@ class PianoPlayer:
 
                     for note in chord:
                         self.press_key(note)
+                    print(f"[LOG] Pressed chord: {''.join(chord)}")
 
             time.sleep(self.delay)
             index += 1
+        
+        if not self._stop_event.is_set():
+            print("[LOG] Finished playing.")
 
 if __name__ == "__main__":
-    print("Quickly head over to your desired choice of playing")
-    print('Music will start playing in 2 seconds...')
-    time.sleep(2)
-    
     player = PianoPlayer()
     try:
         with open('sheet.txt') as f:
             content = f.read()
             player.play(content)
     except FileNotFoundError:
-        print("Error: sheet.txt not found.")
+        print("[ERR] sheet.txt not found.")
