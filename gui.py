@@ -91,7 +91,8 @@ class PianoApp(ctk.CTk):
         self.frame_combined.pack(pady=5, padx=20, fill="x")
         self.frame_combined.grid_columnconfigure((0, 1), weight=1)
 
-        self.frame_tempo = ctk.CTkFrame(self.frame_combined, fg_color=COLOR_CHARCOAL)
+        self.frame_tempo = ctk.CTkFrame(self.frame_combined, fg_color="transparent", 
+                                        border_width=2, border_color=COLOR_CHARCOAL)
         self.frame_tempo.grid(row=0, column=0, padx=(0, 5), sticky="nsew")
 
         initial_bpm = 67
@@ -109,7 +110,8 @@ class PianoApp(ctk.CTk):
         self.slider_tempo.pack(pady=10, padx=10, fill="x")
 
         # Hold Percentage Column
-        self.frame_hold = ctk.CTkFrame(self.frame_combined, fg_color=COLOR_CHARCOAL)
+        self.frame_hold = ctk.CTkFrame(self.frame_combined, fg_color="transparent", 
+                                       border_width=2, border_color=COLOR_CHARCOAL)
         self.frame_hold.grid(row=0, column=1, padx=(5, 0), sticky="nsew")
 
         self.label_hold = ctk.CTkLabel(self.frame_hold, text="Hold Percentage: 67%",
@@ -126,7 +128,8 @@ class PianoApp(ctk.CTk):
         self.slider_hold.pack(pady=10, padx=10, fill="x")
 
         # Humanize Control
-        self.frame_human = ctk.CTkFrame(self, fg_color=COLOR_CHARCOAL)
+        self.frame_human = ctk.CTkFrame(self, fg_color="transparent", 
+                                        border_width=2, border_color=COLOR_CHARCOAL)
         self.frame_human.pack(pady=5, padx=20, fill="x")
 
         self.switch_human = ctk.CTkSwitch(self.frame_human, text="Humanize Mode (Random Jitter)",
@@ -137,7 +140,8 @@ class PianoApp(ctk.CTk):
         self.switch_human.pack(pady=10, padx=20)
 
         # Hotkey Setting
-        self.frame_hotkey = ctk.CTkFrame(self, fg_color=COLOR_CHARCOAL)
+        self.frame_hotkey = ctk.CTkFrame(self, fg_color="transparent", 
+                                         border_width=2, border_color=COLOR_CHARCOAL)
         self.frame_hotkey.pack(pady=5, padx=20, fill="x")
 
         self.label_hotkey_title = ctk.CTkLabel(self.frame_hotkey, text="Hotkey (Start/Stop):",
