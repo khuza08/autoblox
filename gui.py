@@ -78,14 +78,25 @@ class PianoApp(ctk.CTk):
                                         text_color=COLOR_WHITE)
         self.label_title.pack(pady=(20, 5))
 
-        # Sheet Input Area (Textbox)
-        self.label_box = ctk.CTkLabel(self, text="Paste or Edit Music Sheet Below:", 
-                                      font=ctk.CTkFont(size=14), text_color=COLOR_ALABASTER)
-        self.label_box.pack(pady=5)
+        # Sheet Input Header
+        self.frame_sheet_header = ctk.CTkFrame(self, fg_color="transparent")
+        self.frame_sheet_header.pack(pady=(5, 0), padx=25, fill="x")
+
+        self.label_box = ctk.CTkLabel(self.frame_sheet_header, text="Sheet Music Editor:", 
+                                      font=ctk.CTkFont(size=14, weight="bold"), text_color=COLOR_ALABASTER)
+        self.label_box.pack(side="left")
+
+        self.btn_clear = ctk.CTkButton(self.frame_sheet_header, text="Clear", 
+                                        width=60, height=24,
+                                        fg_color=COLOR_CHARCOAL,
+                                        hover_color=COLOR_GRAPHITE,
+                                        text_color=COLOR_ALABASTER,
+                                        command=self.clear_sheet)
+        self.btn_clear.pack(side="right")
         
         self.textbox = ctk.CTkTextbox(self, height=220, fg_color=COLOR_CHARCOAL, 
                                       text_color=COLOR_WHITE, font=("Courier", 12))
-        self.textbox.pack(pady=5, padx=20, fill="both", expand=True)
+        self.textbox.pack(pady=(5, 10), padx=20, fill="both", expand=True)
 
 
         self.frame_combined = ctk.CTkFrame(self, fg_color="transparent")
@@ -237,6 +248,10 @@ class PianoApp(ctk.CTk):
         self.loop_mode = bool(self.switch_loop.get())
         state = "ON" if self.loop_mode else "OFF"
         print(f"[LOG] Loop Mode: {state}")
+
+    def clear_sheet(self):
+        self.textbox.delete("1.0", "end")
+        print("[LOG] Sheet cleared.")
 
     # ---- Global Hotkey via evdev (Multi-Device) ----
     def _start_global_hotkey_listener(self):
